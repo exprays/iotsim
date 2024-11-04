@@ -19,6 +19,9 @@ import (
 	"os"
 	"strings"
 	"time"
+	"github.com/gorilla/websocket"
+    "net/http"
+    "sync"
 )
 
 const (
@@ -265,6 +268,54 @@ func (ap *AuthenticationProtocol) VerifyAuthentication(request *AuthRequest) (bo
 	return true, nil
 }
 
+type MonitorData struct {
+    Devices     []*Device       `json:"devices"`
+    AuthMetrics AuthMetrics     `json:"authMetrics"`
+    Events      []SecurityEvent `json:"events"`
+}
+
+type AuthMetrics struct {
+    LegitimateAuth  int `json:"legitimateAuth"`
+    HackerAttempts  int `json:"hackerAttempts"`
+    ExpiredRequests int `json:"expiredRequests"`
+    ReplayAttacks   int `json:"replayAttacks"`
+}
+
+type SecurityEvent struct {
+    Timestamp time.Time      `json:"timestamp"`
+    Type      SimulationType `json:"type"`
+    DeviceID  string        `json:"deviceId"`
+    Success   bool          `json:"success"`
+}
+
+type Monitor struct {
+    blockchain *BlockchainSimulator
+    auth       *AuthenticationProtocol
+    clients    map[*websocket.Conn]bool
+    broadcast  chan MonitorData
+    mutex      sync.Mutex
+    metrics    AuthMetrics
+    events     []SecurityEvent
+}
+
+var upgrader = websocket.Upgrader{
+    ReadBufferSize:  1024,
+    WriteBufferSize: 1024,
+    CheckOrigin: func(r *http.Request) bool {
+        return true // Allow all origins for demo
+    },
+}
+
+func NewMonitor(bc *BlockchainSimulator, auth *AuthenticationProtocol) *Monitor {
+    return &Monitor{
+        blockchain: bc,
+        auth:       auth,
+        clients:    make(map[*websocket.Conn]bool),
+        broadcast:  make(chan MonitorData),
+        events:     make([]SecurityEvent, 0),
+    }
+}
+
 func printColored(color, message string) {
 	fmt.Printf("%s%s%s\n", color, message, ColorReset)
 }
@@ -302,9 +353,15 @@ func colorBool(b bool) string {
 }
 
 func main() {
+
 	fmt.Println(ASCII_BANNER)
 
 	blockchain := NewBlockchainSimulator()
+	auth := NewAuthenticationProtocol(blockchain)
+
+	// Initialize and start the monitor
+	monitor := NewMonitor(blockchain, auth)
+	monitor.StartServer()
 
 	device := &Device{
 		ID:         "device001",
@@ -321,8 +378,6 @@ func main() {
 	if err := blockchain.RegisterResource(resource); err != nil {
 		log.Fatalf("Failed to register resource: %v", err)
 	}
-
-	auth := NewAuthenticationProtocol(blockchain)
 
 	printColored(ColorGreen, "Blockchain System Initialized Successfully!")
 	printColored(ColorGreen, "Device and Resource Registered!")
@@ -372,6 +427,7 @@ func main() {
 		fmt.Println(string(requestJSON))
 
 		verified, err := auth.VerifyAuthentication(simulatedRequest)
+		monitor.RecordAuthEvent(simType, device.ID, verified)
 
 		if verified {
 			printResult(true, "Authentication successful")

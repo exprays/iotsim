@@ -1,10 +1,26 @@
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { Shield, ShieldAlert, Wifi, Clock, Server, Activity } from 'lucide-react';
 
 const IoTMonitor = () => {
-  const [monitorData, setMonitorData] = useState({
+  interface Device {
+    id: string;
+    status: string;
+  }
+
+  const [monitorData, setMonitorData] = useState<{
+    devices: Device[];
+    authMetrics: {
+      legitimateAuth: number;
+      hackerAttempts: number;
+      expiredRequests: number;
+      replayAttacks: number;
+    };
+    events: any[];
+  }>({
     devices: [],
     authMetrics: {
       legitimateAuth: 0,
@@ -16,7 +32,7 @@ const IoTMonitor = () => {
   });
 
   const [connected, setConnected] = useState(false);
-  const [connectionError, setConnectionError] = useState(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:8080/ws');
@@ -30,7 +46,7 @@ const IoTMonitor = () => {
     ws.onclose = () => {
       console.log('Disconnected from IoT Monitor');
       setConnected(false);
-      setConnectionError('Connection lost. Retrying...');
+      setConnectionError("Connection lost. Retrying...");
       // Attempt to reconnect after 5 seconds
       setTimeout(() => {
         setMonitorData({
@@ -62,7 +78,7 @@ const IoTMonitor = () => {
   }, []);
 
   // Calculate auth history data for the line chart
-  const authHistory = monitorData.events.reduce((acc, event) => {
+  const authHistory = monitorData.events.reduce((acc: any, event: any) => {
     const hour = new Date(event.timestamp).getHours();
     if (!acc[hour]) {
       acc[hour] = { time: `${hour}:00`, legitimate: 0, failed: 0 };
@@ -218,7 +234,7 @@ const IoTMonitor = () => {
                 </tr>
               </thead>
               <tbody>
-                {monitorData.events.slice().reverse().map((event, index) => (
+                {monitorData.events.slice().reverse().map((event: any, index) => (
                   <tr key={index} className="bg-white border-b">
                     <td className="px-6 py-4">
                       {new Date(event.timestamp).toLocaleTimeString()}
