@@ -16,12 +16,13 @@ import (
 	"fmt"
 	"log"
 	rn "math/rand"
+	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
+
 	"github.com/gorilla/websocket"
-    "net/http"
-    "sync"
 )
 
 const (
@@ -269,51 +270,155 @@ func (ap *AuthenticationProtocol) VerifyAuthentication(request *AuthRequest) (bo
 }
 
 type MonitorData struct {
-    Devices     []*Device       `json:"devices"`
-    AuthMetrics AuthMetrics     `json:"authMetrics"`
-    Events      []SecurityEvent `json:"events"`
+	Devices     []*Device       `json:"devices"`
+	AuthMetrics AuthMetrics     `json:"authMetrics"`
+	Events      []SecurityEvent `json:"events"`
 }
 
 type AuthMetrics struct {
-    LegitimateAuth  int `json:"legitimateAuth"`
-    HackerAttempts  int `json:"hackerAttempts"`
-    ExpiredRequests int `json:"expiredRequests"`
-    ReplayAttacks   int `json:"replayAttacks"`
+	LegitimateAuth  int `json:"legitimateAuth"`
+	HackerAttempts  int `json:"hackerAttempts"`
+	ExpiredRequests int `json:"expiredRequests"`
+	ReplayAttacks   int `json:"replayAttacks"`
 }
 
 type SecurityEvent struct {
-    Timestamp time.Time      `json:"timestamp"`
-    Type      SimulationType `json:"type"`
-    DeviceID  string        `json:"deviceId"`
-    Success   bool          `json:"success"`
+	Timestamp time.Time      `json:"timestamp"`
+	Type      SimulationType `json:"type"`
+	DeviceID  string         `json:"deviceId"`
+	Success   bool           `json:"success"`
 }
 
 type Monitor struct {
-    blockchain *BlockchainSimulator
-    auth       *AuthenticationProtocol
-    clients    map[*websocket.Conn]bool
-    broadcast  chan MonitorData
-    mutex      sync.Mutex
-    metrics    AuthMetrics
-    events     []SecurityEvent
+	blockchain *BlockchainSimulator
+	auth       *AuthenticationProtocol
+	clients    map[*websocket.Conn]bool
+	broadcast  chan MonitorData
+	mutex      sync.Mutex
+	metrics    AuthMetrics
+	events     []SecurityEvent
 }
 
 var upgrader = websocket.Upgrader{
-    ReadBufferSize:  1024,
-    WriteBufferSize: 1024,
-    CheckOrigin: func(r *http.Request) bool {
-        return true // Allow all origins for demo
-    },
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true // Allow all origins for demo
+	},
 }
 
 func NewMonitor(bc *BlockchainSimulator, auth *AuthenticationProtocol) *Monitor {
-    return &Monitor{
-        blockchain: bc,
-        auth:       auth,
-        clients:    make(map[*websocket.Conn]bool),
-        broadcast:  make(chan MonitorData),
-        events:     make([]SecurityEvent, 0),
-    }
+	return &Monitor{
+		blockchain: bc,
+		auth:       auth,
+		clients:    make(map[*websocket.Conn]bool),
+		broadcast:  make(chan MonitorData),
+		events:     make([]SecurityEvent, 0),
+	}
+}
+
+func (m *Monitor) StartServer() {
+	// Start HTTP server for WebSocket connections
+	http.HandleFunc("/ws", m.handleConnections)
+
+	// Start broadcasting goroutine
+	go m.handleBroadcasts()
+
+	// Start the server in a goroutine
+	go func() {
+		log.Println("Starting WebSocket server on :8080")
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			log.Fatal("ListenAndServe:", err)
+		}
+	}()
+}
+
+func (m *Monitor) handleConnections(w http.ResponseWriter, r *http.Request) {
+	// Upgrade initial GET request to a WebSocket
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("Error upgrading connection: %v", err)
+		return
+	}
+	defer ws.Close()
+
+	// Register new client
+	m.mutex.Lock()
+	m.clients[ws] = true
+	m.mutex.Unlock()
+
+	// Send initial data
+	initialData := m.getMonitorData()
+	if err := ws.WriteJSON(initialData); err != nil {
+		log.Printf("Error sending initial data: %v", err)
+		return
+	}
+
+	// Keep connection alive and handle disconnection
+	for {
+		if _, _, err := ws.ReadMessage(); err != nil {
+			m.mutex.Lock()
+			delete(m.clients, ws)
+			m.mutex.Unlock()
+			break
+		}
+	}
+}
+
+func (m *Monitor) handleBroadcasts() {
+	for data := range m.broadcast {
+		m.mutex.Lock()
+		for client := range m.clients {
+			if err := client.WriteJSON(data); err != nil {
+				log.Printf("Error broadcasting to client: %v", err)
+				client.Close()
+				delete(m.clients, client)
+			}
+		}
+		m.mutex.Unlock()
+	}
+}
+
+func (m *Monitor) RecordAuthEvent(simType SimulationType, deviceID string, success bool) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	// Record event
+	event := SecurityEvent{
+		Timestamp: time.Now(),
+		Type:      simType,
+		DeviceID:  deviceID,
+		Success:   success,
+	}
+	m.events = append(m.events, event)
+
+	// Update metrics
+	switch simType {
+	case LegitimateAuth:
+		m.metrics.LegitimateAuth++
+	case HackerAttempt:
+		m.metrics.HackerAttempts++
+	case ExpiredRequest:
+		m.metrics.ExpiredRequests++
+	case ReplayAttack:
+		m.metrics.ReplayAttacks++
+	}
+
+	// Broadcast updated data
+	m.broadcast <- m.getMonitorData()
+}
+
+func (m *Monitor) getMonitorData() MonitorData {
+	devices := make([]*Device, 0)
+	for _, device := range m.blockchain.Devices {
+		devices = append(devices, device)
+	}
+
+	return MonitorData{
+		Devices:     devices,
+		AuthMetrics: m.metrics,
+		Events:      m.events,
+	}
 }
 
 func printColored(color, message string) {
