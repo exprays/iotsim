@@ -66,7 +66,7 @@ go build
 or you can just run
 ```bash
 go run main.go
-'''
+```
 
 ###Starting the monitor dashboard
 
