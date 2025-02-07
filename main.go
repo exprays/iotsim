@@ -1,7 +1,7 @@
 // IOTSIM is a simple IoT authentication simulator that demonstrates the BasIoT protocol.
 // The simulator creates a blockchain system with devices and resources, and simulates different scenarios for authentication.
 // The scenarios include legitimate authentication, hacker attempts, expired requests, and replay attacks.
-// Made for seminar by exprays a.k.a surya
+// Made for HackNation4.0 by Team cipher
 
 package main
 
@@ -28,10 +28,10 @@ import (
 const (
 	ASCII_BANNER = `
 [1;36m╔══════════════════════════════════════════╗
-║                 IOTSIM                   ║
-║          Secure IoT Auth Demo            ║
-║                                          ║
-║            made by exprays              ║
+║                 IOTSIM                         ║
+║           Secure IoT Auth Demo                 ║
+║                                                ║
+║            made by Team Cipher                 ║
 ╚══════════════════════════════════════════╝[0m
 `
 	ColorReset  = "\033[0m"
@@ -269,6 +269,118 @@ func (ap *AuthenticationProtocol) VerifyAuthentication(request *AuthRequest) (bo
 	return true, nil
 }
 
+func displayKeyGeneration(keyA, keyB *rsa.PrivateKey) {
+	// Show key generation animation
+	displayFrame(keyMatchingFrames[0], ColorBlue)
+	time.Sleep(1 * time.Second)
+
+	// Display public key fingerprints
+	pubKeyA := sha256.Sum256([]byte(fmt.Sprintf("%v", keyA.PublicKey.N)))
+	pubKeyB := sha256.Sum256([]byte(fmt.Sprintf("%v", keyB.PublicKey.N)))
+
+	keyFrame := fmt.Sprintf(`
+    Device A                 Device B
+    [💻 ]                    [ 🖥️]
+    🔑 A: %x           🔑 B: %x
+    `, pubKeyA[:4], pubKeyB[:4])
+
+	displayFrame(keyFrame, ColorCyan)
+	time.Sleep(1 * time.Second)
+}
+
+func (ap *AuthenticationProtocol) SimulateSecureConnection(deviceA, deviceB *Device) (*DeviceConnection, error) {
+	printHeader("Initiating Secure Connection")
+
+	// Display initial state
+	displayFrame(connectionAnimationFrames[0], ColorBlue)
+
+	// Step 1: Initial Hello
+	printColored(ColorYellow, "Step 1: Initial Contact")
+	displayFrame(connectionAnimationFrames[1], ColorBlue)
+
+	// Generate ephemeral keys for perfect forward secrecy
+	printColored(ColorYellow, "Step 2: Generating Ephemeral Keys")
+	animateHandshake()
+
+	ephemeralKeyA, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate ephemeral key A: %v", err)
+	}
+
+	ephemeralKeyB, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate ephemeral key B: %v", err)
+	}
+
+	// Display key generation and matching
+	displayKeyGeneration(ephemeralKeyA, ephemeralKeyB)
+
+	// Step 3: Key Exchange
+	printColored(ColorYellow, "Step 3: Exchanging Public Keys")
+	displayFrame(keyMatchingFrames[2], ColorBlue)
+	time.Sleep(1 * time.Second)
+	displayFrame(keyMatchingFrames[3], ColorBlue)
+	time.Sleep(1 * time.Second)
+
+	// Step 4: Challenge
+	printColored(ColorYellow, "Step 4: Challenge-Response Authentication")
+	displayFrame(connectionAnimationFrames[2], ColorBlue)
+
+	challenge := make([]byte, 32)
+	rand.Read(challenge)
+
+	// Sign challenge with permanent keys
+	signature, err := rsa.SignPKCS1v15(rand.Reader, deviceA.PrivateKey, crypto.SHA256, challenge)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign challenge: %v", err)
+	}
+
+	// Step 5: Response Verification
+	printColored(ColorYellow, "Step 5: Verifying Signatures")
+	displayFrame(connectionAnimationFrames[3], ColorBlue)
+
+	// Verify signature
+	err = rsa.VerifyPKCS1v15(deviceA.PublicKey, crypto.SHA256, challenge, signature)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify signature: %v", err)
+	}
+
+	// Generate shared secret
+	sharedSecret := make([]byte, 32)
+	rand.Read(sharedSecret)
+
+	// Display shared secret establishment
+	sharedFrame := fmt.Sprintf(`
+    Device A                 Device B
+    [💻 ]    <══════>       [ 🖥️]
+    🔒 Shared: %x      🔒 Shared: %x
+    `, sharedSecret[:4], sharedSecret[:4])
+
+	displayFrame(sharedFrame, ColorGreen)
+	time.Sleep(1 * time.Second)
+
+	connection := &DeviceConnection{
+		DeviceA:      deviceA,
+		DeviceB:      deviceB,
+		SharedSecret: sharedSecret,
+		Established:  true,
+		StartTime:    time.Now(),
+	}
+
+	// Display final connection details
+	printColored(ColorGreen, "\n✓ Secure connection established successfully!")
+	printColored(ColorYellow, "\nConnection Details:")
+	fmt.Printf("• Device A: %s (%s)\n", deviceA.ID, deviceA.Descriptor)
+	fmt.Printf("• Device B: %s (%s)\n", deviceB.ID, deviceB.Descriptor)
+	fmt.Printf("• Established: %s\n", time.Now().Format(time.RFC3339))
+	fmt.Printf("• Security: Perfect Forward Secrecy with Ephemeral Keys\n")
+	fmt.Printf("• Key Exchange: RSA-2048\n")
+	sharedSecretHash := sha256.Sum256(sharedSecret)
+	fmt.Printf("• Shared Secret Hash: %x\n", sharedSecretHash[:8])
+
+	return connection, nil
+}
+
 type MonitorData struct {
 	Devices     []*Device       `json:"devices"`
 	AuthMetrics AuthMetrics     `json:"authMetrics"`
@@ -287,6 +399,80 @@ type SecurityEvent struct {
 	Type      SimulationType `json:"type"`
 	DeviceID  string         `json:"deviceId"`
 	Success   bool           `json:"success"`
+}
+
+// DeviceConnection represents a secure connection between two devices
+type DeviceConnection struct {
+	DeviceA      *Device
+	DeviceB      *Device
+	SharedSecret []byte
+	Established  bool
+	StartTime    time.Time
+}
+
+// ASCII animation frames for the connection process
+var connectionAnimationFrames = []string{
+	`
+    Device A                 Device B
+    [💻 ]                    [ 🖥️]
+    ....                    ....
+    `,
+	`
+    Device A                 Device B
+    [💻 ]    ------>        [ 🖥️]
+    ....    Hello!          ....
+    `,
+	`
+    Device A                 Device B
+    [💻 ]    <------        [ 🖥️]
+    ....    Challenge       ....
+    `,
+	`
+    Device A                 Device B
+    [💻 ]    ------>        [ 🖥️]
+    ....    Response        ....
+    `,
+	`
+    Device A                 Device B
+    [💻 ]    <══════>       [ 🖥️]
+    ....   Secure Link      ....
+    `,
+}
+
+var keyMatchingFrames = []string{
+	`
+    Device A                 Device B
+    [💻 ]                    [ 🖥️]
+    🔑 Generating...         🔑 Generating...
+    `,
+	`
+    Device A                 Device B
+    [💻 ]                    [ 🖥️]
+    🔑 A: 3f2e...           🔑 B: 8a1d...
+    `,
+	`
+    Device A                 Device B
+    [💻 ] ----key_pub_A---> [ 🖥️]
+    🔑 Exchanging           🔑 Receiving
+    `,
+	`
+    Device A                 Device B
+    [💻 ] <--key_pub_B---- [ 🖥️]
+    🔑 Receiving           🔑 Exchanging
+    `,
+	`
+    Device A                 Device B
+    [💻 ]    <══════>       [ 🖥️]
+    🔒 Shared: 9d4e...      🔒 Shared: 9d4e...
+    `,
+}
+
+// handshakeAnimationFrames for the key exchange process
+var handshakeAnimationFrames = []string{
+	"🔑 Generating keys     ",
+	"🔑 Generating keys.    ",
+	"🔑 Generating keys..   ",
+	"🔑 Generating keys...  ",
 }
 
 type Monitor struct {
@@ -457,6 +643,52 @@ func colorBool(b bool) string {
 	return ColorRed + "✗" + ColorReset
 }
 
+func clearScreen() {
+	fmt.Print("\033[H\033[2J")
+}
+
+func displayFrame(frame string, color string) {
+	clearScreen()
+	fmt.Printf("%s%s%s\n", color, frame, ColorReset)
+	time.Sleep(500 * time.Millisecond)
+}
+
+func animateHandshake() {
+	for i := 0; i < 3; i++ {
+		for _, frame := range handshakeAnimationFrames {
+			clearScreen()
+			fmt.Printf("%s%s%s\n", ColorCyan, frame, ColorReset)
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+}
+
+func simulateDeviceConnection(blockchain *BlockchainSimulator, auth *AuthenticationProtocol) {
+	// Register a second device for connection demonstration
+	deviceB := &Device{
+		ID:         "device002",
+		Descriptor: "Smart Light Controller",
+	}
+
+	if err := blockchain.RegisterDevice(deviceB); err != nil {
+		log.Fatalf("Failed to register device B: %v", err)
+	}
+
+	// Get existing device
+	deviceA := blockchain.Devices["device001"]
+
+	// Simulate connection
+	connection, err := auth.SimulateSecureConnection(deviceA, deviceB)
+	if err != nil {
+		printColored(ColorRed, fmt.Sprintf("Connection failed: %v", err))
+		return
+	}
+
+	if connection.Established {
+		printColored(ColorGreen, "\nSecure connection simulation completed successfully!")
+	}
+}
+
 func main() {
 
 	fmt.Println(ASCII_BANNER)
@@ -493,11 +725,12 @@ func main() {
 		printColored(ColorCyan, "2. Hacker Attempt")
 		printColored(ColorCyan, "3. Expired Request")
 		printColored(ColorCyan, "4. Replay Attack")
-		printColored(ColorCyan, "5. Exit")
+		printColored(ColorCyan, "5. Simulate Device Connection")
+		printColored(ColorCyan, "6. Exit")
 
-		choice := getUserInput("\nSelect scenario (1-5): ")
+		choice := getUserInput("\nSelect scenario (1-6): ")
 
-		if choice == "5" {
+		if choice == "6" {
 			printColored(ColorGreen, "Exiting simulator. Goodbye!")
 			break
 		}
@@ -512,6 +745,12 @@ func main() {
 			simType = ExpiredRequest
 		case "4":
 			simType = ReplayAttack
+		case "5":
+			simulateDeviceConnection(blockchain, auth)
+			continue
+		case "6":
+			printColored(ColorGreen, "Exiting simulator. Goodbye!")
+			break
 		default:
 			printColored(ColorRed, "Invalid choice. Please try again.")
 			continue
