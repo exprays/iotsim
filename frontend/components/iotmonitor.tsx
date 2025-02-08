@@ -190,7 +190,7 @@ const IoTMonitor = () => {
             setMonitorData(prev => ({
               ...prev,
               ...data,
-              events: [...(prev.events || []), ...(data.events || [])].slice(-100), // Keep last 100 events
+              events: [...(prev.events || []), ...(data.events || [])].slice(-5), // Keep last 100 events
             }));
           } catch (error) {
             console.error('Error parsing WebSocket message:', error);
@@ -435,7 +435,6 @@ const IoTMonitor = () => {
       </div>
 
       <DeviceSimulationControls />
-    <BlockchainStorageSection />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>

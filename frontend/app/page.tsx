@@ -1,6 +1,6 @@
 "use client"
 
-import GridDistortion from "@/components/global/GridDistortion";
+import IoTMonitor from "@/components/iotmonitor";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
@@ -12,10 +12,6 @@ export default function Home() {
   }
 
   return (
-    <div>
-      <button onClick={onClick}>
-        monitor
-      </button>
-    </div>
+    <IoTMonitor />
   );
 }
