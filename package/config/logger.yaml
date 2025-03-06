@@ -4,7 +4,7 @@ enableConsole: true
 consoleLevel: info
 enableFile: true
 fileLevel: debug
-filePath: "./logs/iot-blockchain.log"
+filePath: "./logs/ranger.log"
 fileMaxSize: 100
 fileMaxBackups: 5
 fileMaxAge: 30
