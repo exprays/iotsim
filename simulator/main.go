@@ -852,7 +852,7 @@ func simulateDeviceConnection(blockchain *BlockchainSimulator, auth *Authenticat
 
 func main() {
 
-	fmt.Println(ASCII_BANNER)
+	fmt.Print(ASCII_BANNER)
 
 	blockchain := NewBlockchainSimulator()
 	auth := NewAuthenticationProtocol(blockchain)
