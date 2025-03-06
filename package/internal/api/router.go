@@ -16,6 +16,25 @@ type Router struct {
 	config *core.APIConfig
 }
 
+// SetupRouter creates and configures the API router with all routes and middleware
+func SetupRouter(app *core.App, jwtSecret string, allowedOrigins []string) http.Handler {
+	// Create a new router instance
+	router := NewRouter(app)
+
+	// Configure additional settings based on parameters if needed
+	if jwtSecret != "" && jwtSecret != router.config.JWTSecret {
+		// Update JWT secret if different from config
+		router.config.JWTSecret = jwtSecret
+	}
+
+	if len(allowedOrigins) > 0 {
+		// Update allowed origins if provided
+		router.config.AllowedOrigins = allowedOrigins
+	}
+
+	return router
+}
+
 // NewRouter creates a new API router with all routes configured
 func NewRouter(app *core.App) *Router {
 	r := &Router{

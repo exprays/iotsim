@@ -272,6 +272,16 @@ func (r *DeviceRegistry) ListDevices() []*Device {
 	return devices
 }
 
+// UpdateLastSeen updates the last time a device was seen active
+func (r *DeviceRegistry) UpdateLastSeen(deviceID string) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if device, exists := r.devices[deviceID]; exists {
+		device.LastSeen = time.Now()
+	}
+}
+
 // GetDeviceCount returns the number of registered devices
 func (r *DeviceRegistry) GetDeviceCount() int {
 	r.mutex.RLock()

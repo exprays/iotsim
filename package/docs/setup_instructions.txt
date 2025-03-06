@@ -1,0 +1,21 @@
+API server
+
+# Create necessary directories
+mkdir -p data/blockchain data/devices logs
+
+# Start the server
+go run cmd/server/main.go --config configs/config.yaml
+
+go run cmd/cli/main.go --config configs/config.yaml //FOR CLIENT
+
+send <device-id> set_led off
+blockchain txs
+mine
+
+7. Security Features
+The IoT Blockchain Toolkit secures your IoT data in several ways:
+
+Device Authentication: Each ESP8266 receives a unique API key for secure communication
+Immutable Record: All device actions and data are recorded on the blockchain
+Data Integrity: The blockchain ensures data cannot be tampered with
+Audit Trail: All historical device states can be verified and traced

@@ -1,0 +1,40 @@
+debug: false
+logLevel: info
+
+blockchain:
+  difficulty: 3
+  miningReward: 1.0
+  miningInterval: 30
+  transactionsPerBlock: 3
+  persistPath: "./data/blockchain"
+
+device:
+  registryPath: "./data/devices.json"
+  deviceTimeoutSeconds: 300
+  statusCheckInterval: 60
+  autoApproveDevices: true
+
+api:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  authEnabled: true
+  jwtSecret: "your-secret-key-change-this-in-production"
+  allowedOrigins:
+    - "*"
+
+mqtt:
+  enabled: true
+  broker: "localhost"
+  port: 1883
+  clientId: "iot-blockchain-toolkit"
+  username: ""
+  password: ""
+  topicRoot: "iot-blockchain"
+  qos: 1
+
+web:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8081
+  title: "IoT Blockchain Toolkit Dashboard"

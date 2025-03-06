@@ -1,0 +1,21 @@
+NodeMCU ESP8266    
++------------+     
+|            |     
+|        D2  |------|>|---[220Ω]---GND
+|            |     LED
+|            |     
+|        D5  |-----[10KΩ]---GND  (OPTIONAL: Push button)
+|            |      |
+|            |      VCC
++------------+     
+
+
+Insert the ESP8266 into a breadboard
+Connect the LED:
+Connect the anode (longer leg) to D2 (GPIO4)
+Connect the cathode (shorter leg) to one end of the 220Ω resistor
+Connect the other end of the resistor to GND
+(Optional) Connect a push button:
+Connect one terminal of the button to D5 (GPIO14)
+Connect the other terminal to GND
+Add a 10KΩ pull-up resistor between D5 and VCC (3.3V)
