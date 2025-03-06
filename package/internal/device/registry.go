@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -305,17 +307,53 @@ func (r *DeviceRegistry) SaveRegistry(path string) error {
 		return fmt.Errorf("failed to marshal device registry: %w", err)
 	}
 
-	// In a real implementation, you would write this to a file
-	// For now, we'll just log the output (simplified)
-	fmt.Printf("Would save registry to %s with %d bytes\n", path, len(data))
+	// Create directory if it doesn't exist
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory for registry file: %w", err)
+	}
+
+	// Write to file (atomic write pattern)
+	tempFile := path + ".tmp"
+	if err := os.WriteFile(tempFile, data, 0644); err != nil {
+		return fmt.Errorf("failed to write registry to temporary file: %w", err)
+	}
+
+	// Rename to target file (atomic operation)
+	if err := os.Rename(tempFile, path); err != nil {
+		return fmt.Errorf("failed to save registry file: %w", err)
+	}
+
 	return nil
 }
 
 // LoadRegistry loads the registry from a JSON file
 func (r *DeviceRegistry) LoadRegistry(path string) error {
-	// In a real implementation, you would read from a file
-	// This is a simplified version for demonstration
-	return fmt.Errorf("not implemented")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read registry file: %w", err)
+	}
+
+	// Unmarshal the JSON data
+	var devices map[string]*Device
+	if err := json.Unmarshal(data, &devices); err != nil {
+		return fmt.Errorf("failed to parse registry data: %w", err)
+	}
+
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	// Clear existing data
+	r.devices = make(map[string]*Device)
+	r.apiKeyIndex = make(map[string]string)
+
+	// Load devices and rebuild API key index
+	for id, device := range devices {
+		r.devices[id] = device
+		r.apiKeyIndex[device.APIKey] = id
+	}
+
+	return nil
 }
 
 // Helper functions
