@@ -3,11 +3,15 @@ package core
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"ranger/internal/blockchain"
 	"ranger/internal/device"
+
+	"go.uber.org/zap"
 )
 
 // Application states
@@ -26,6 +30,7 @@ type App struct {
 	Blockchain     *blockchain.Blockchain
 	DeviceRegistry *device.DeviceRegistry
 	ESP8266Manager *device.ESP8266Manager
+	Logger         *zap.Logger
 
 	// App status
 	Status       string
@@ -47,6 +52,10 @@ func NewApp(config *Config) (*App, error) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	logger, err := zap.NewProduction()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize logger: %w", err)
+	}
 
 	app := &App{
 		Config:     config,
@@ -54,6 +63,7 @@ func NewApp(config *Config) (*App, error) {
 		stopChan:   make(chan struct{}),
 		ctx:        ctx,
 		cancelFunc: cancel,
+		Logger:     logger,
 	}
 
 	return app, nil
@@ -70,8 +80,28 @@ func (a *App) Initialize() error {
 		a.Config.Blockchain.MiningReward,
 	)
 
-	// Initialize device registry
-	a.DeviceRegistry = device.NewDeviceRegistry()
+	// Get master key from environment or configuration
+	masterKey := os.Getenv("IOT_KEYSTORE_MASTER_KEY")
+	if masterKey == "" {
+		// Fallback to configuration or use a default (for development only)
+		masterKey = a.Config.Device.KeyFormat
+		if masterKey == "" {
+			a.Logger.Warn("No master key provided for key store - using default (NOT SECURE FOR PRODUCTION)")
+			masterKey = "default-master-key-for-development-only-do-not-use-in-production"
+		}
+	}
+
+	// Set default key store path if not provided
+	keyStorePath := a.Config.Device.KeyStorePath
+	if keyStorePath == "" {
+		// Use default path relative to registry path
+		registryDir := filepath.Dir(a.Config.Device.RegistryPath)
+		keyStorePath = filepath.Join(registryDir, "keystore.dat")
+		a.Logger.Info("Using default key store path", zap.String("path", keyStorePath))
+	}
+
+	// Initialize device registry with secure key storage
+	a.DeviceRegistry = device.NewDeviceRegistry(keyStorePath, masterKey)
 
 	// Initialize ESP8266 manager
 	a.ESP8266Manager = device.NewESP8266Manager(a.DeviceRegistry)
@@ -219,6 +249,7 @@ func (a *App) ProcessDeviceData(deviceID string, data []byte) error {
 	// Get device from registry
 	dev, err := a.DeviceRegistry.GetDeviceByID(deviceID)
 	if err != nil {
+		a.Logger.Error("Device not found", zap.String("device_id", deviceID))
 		return err
 	}
 
@@ -230,22 +261,43 @@ func (a *App) ProcessDeviceData(deviceID string, data []byte) error {
 		data,
 	)
 
+	// Load the device's private key from secure storage
+	privateKey, err := a.DeviceRegistry.GetPrivateKeyForDevice(
+		deviceID,
+		"ProcessDeviceData:SignTransaction",
+	)
+	if err != nil {
+		a.Logger.Error("Failed to retrieve device private key",
+			zap.String("device_id", deviceID),
+			zap.Error(err))
+		return fmt.Errorf("failed to retrieve device private key: %w", err)
+	}
+
+	// Sign the transaction with the private key
+	if err := blockchain.SignTransaction(&tx, privateKey); err != nil {
+		a.Logger.Error("Failed to sign transaction",
+			zap.String("device_id", deviceID),
+			zap.Error(err))
+		return fmt.Errorf("failed to sign transaction: %w", err)
+	}
+
 	// Add transaction to blockchain
 	err = a.Blockchain.AddTransaction(tx)
 	if err != nil {
+		a.Logger.Error("Failed to add transaction to blockchain",
+			zap.String("device_id", deviceID),
+			zap.Error(err))
 		return err
 	}
 
 	// If we have enough pending transactions, trigger mining
 	if a.Blockchain.GetPendingTransactionsCount() >= a.Config.Blockchain.TransactionsPerBlock {
-		a.wg.Add(1)
 		go func() {
-			defer a.wg.Done()
 			_, err := a.Blockchain.MineBlock("SYSTEM")
 			if err != nil {
-				fmt.Printf("Mining error: %v\n", err)
-			} else if a.Config.Debug {
-				fmt.Println("New block mined and added to the blockchain")
+				a.Logger.Error("Mining failed", zap.Error(err))
+			} else {
+				a.Logger.Info("Block mined successfully")
 			}
 		}()
 	}

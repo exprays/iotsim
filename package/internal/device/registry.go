@@ -1,8 +1,10 @@
 package device
 
 import (
+	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"ranger/internal/blockchain"
+	"ranger/internal/security/keystore"
 	"ranger/internal/util/logger"
 
 	"go.uber.org/zap"
@@ -44,6 +48,7 @@ type Device struct {
 	RegisteredAt    time.Time              `json:"registeredAt"`
 	APIKey          string                 `json:"apiKey"`
 	BlockchainAddr  string                 `json:"blockchainAddr"`
+	PublicKey       []byte                 `json:"publicKey"`
 	Capabilities    []string               `json:"capabilities"`
 	Metadata        map[string]interface{} `json:"metadata"`
 	FirmwareVersion string                 `json:"firmwareVersion"`
@@ -57,6 +62,7 @@ type DeviceRegistry struct {
 	mutex        sync.RWMutex
 	eventChannel chan DeviceEvent
 	log          *logger.Logger
+	keyStore     *keystore.KeyStore
 }
 
 // DeviceEvent represents events related to devices
@@ -68,15 +74,23 @@ type DeviceEvent struct {
 }
 
 // NewDeviceRegistry creates a new device registry
-func NewDeviceRegistry() *DeviceRegistry {
+func NewDeviceRegistry(keyStorePath string, masterKey string) *DeviceRegistry {
 	log := logger.GetDefaultLogger().WithField("component", "device_registry")
 	log.Info("Creating new device registry")
+
+	// Initialize key store
+	keyStore, err := keystore.NewKeyStore(masterKey, keyStorePath)
+	if err != nil {
+		log.Error("Failed to initialize key store, running without secure key storage", zap.Error(err))
+		// Continue without keystore in this case
+	}
 
 	return &DeviceRegistry{
 		devices:      make(map[string]*Device),
 		apiKeyIndex:  make(map[string]string),
 		eventChannel: make(chan DeviceEvent, 100),
 		log:          log,
+		keyStore:     keyStore,
 	}
 }
 
@@ -103,12 +117,28 @@ func (r *DeviceRegistry) RegisterDevice(name string, deviceType DeviceType, capa
 		return nil, fmt.Errorf("failed to generate API key: %w", err)
 	}
 
-	// Generate blockchain address for this device
-	blockchainAddr, err := generateBlockchainAddress()
+	// Generate key pair for blockchain transactions
+	privateKey, publicKey, err := blockchain.GenerateKeyPair()
 	if err != nil {
-		r.log.Error("Failed to generate blockchain address", zap.Error(err))
-		return nil, fmt.Errorf("failed to generate blockchain address: %w", err)
+		r.log.Error("Failed to generate blockchain keys", zap.Error(err))
+		return nil, fmt.Errorf("failed to generate blockchain keys: %w", err)
 	}
+
+	// Store private key securely (in a real system, this should be handled with HSM or similar)
+	privateKeyPEM, err := blockchain.EncodePrivateKey(privateKey)
+	if err != nil {
+		r.log.Error("Failed to encode private key", zap.Error(err))
+		return nil, fmt.Errorf("failed to encode private key: %w", err)
+	}
+
+	publicKeyPEM, err := blockchain.EncodePublicKey(publicKey)
+	if err != nil {
+		r.log.Error("Failed to encode public key", zap.Error(err))
+		return nil, fmt.Errorf("failed to encode public key: %w", err)
+	}
+
+	// Generate blockchain address from public key (simplified)
+	blockchainAddr := fmt.Sprintf("0x%s", hex.EncodeToString(publicKeyPEM)[:40])
 
 	now := time.Now()
 	device := &Device{
@@ -120,8 +150,24 @@ func (r *DeviceRegistry) RegisterDevice(name string, deviceType DeviceType, capa
 		RegisteredAt:   now,
 		APIKey:         apiKey,
 		BlockchainAddr: blockchainAddr,
+		PublicKey:      publicKeyPEM,
 		Capabilities:   capabilities,
 		Metadata:       metadata,
+	}
+
+	// Store private key securely in key vault
+	if r.keyStore != nil {
+		if err := r.keyStore.StorePrivateKey(deviceID, privateKeyPEM); err != nil {
+			r.log.Error("Failed to store private key securely",
+				zap.String("device_id", deviceID),
+				zap.Error(err))
+			return nil, fmt.Errorf("failed to store private key: %w", err)
+		}
+		r.log.Info("Device private key stored securely", zap.String("device_id", deviceID))
+	} else {
+		r.log.Warn("Key store not available, unable to securely store private key",
+			zap.String("device_id", deviceID))
+		// In a production system, this should be a fatal error
 	}
 
 	r.devices[deviceID] = device
@@ -179,6 +225,25 @@ func (r *DeviceRegistry) GetDeviceByAPIKey(apiKey string) (*Device, error) {
 	}
 
 	return device, nil
+}
+
+// GetDeviceByBlockchainAddr retrieves a device by its blockchain address
+func (r *DeviceRegistry) GetDeviceByBlockchainAddr(blockchainAddr string) (*Device, error) {
+	r.log.Debug("Looking up device by blockchain address",
+		zap.String("blockchain_addr", blockchainAddr))
+
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	for _, device := range r.devices {
+		if device.BlockchainAddr == blockchainAddr {
+			return device, nil
+		}
+	}
+
+	r.log.Warn("Device not found by blockchain address",
+		zap.String("blockchain_addr", blockchainAddr))
+	return nil, errors.New("device not found")
 }
 
 // UpdateDeviceStatus updates a device's status
@@ -315,6 +380,28 @@ func (r *DeviceRegistry) RemoveDevice(id string) error {
 	}
 
 	r.log.Info("Device removed successfully", zap.String("device_id", id))
+
+	return nil
+}
+
+// RemoveDeviceWithKeys removes a device from the registry and cleans up keys
+func (r *DeviceRegistry) RemoveDeviceWithKeys(id string) error {
+	r.log.Info("Removing device with keys", zap.String("device_id", id))
+
+	// First remove the device from the registry
+	if err := r.RemoveDevice(id); err != nil {
+		return err
+	}
+
+	// Then remove the keys from key store
+	if r.keyStore != nil {
+		if err := r.keyStore.DeleteKey(id); err != nil {
+			r.log.Warn("Failed to remove device key",
+				zap.String("device_id", id),
+				zap.Error(err))
+			// Don't fail the operation if key deletion fails
+		}
+	}
 
 	return nil
 }
@@ -459,6 +546,64 @@ func (r *DeviceRegistry) LoadRegistry(path string) error {
 		zap.Duration("elapsed_time", elapsed))
 
 	return nil
+}
+
+// GetPrivateKeyForDevice retrieves a device's private key for signing transactions
+func (r *DeviceRegistry) GetPrivateKeyForDevice(deviceID string, reason string) (*ecdsa.PrivateKey, error) {
+	if r.keyStore == nil {
+		return nil, fmt.Errorf("key store not available")
+	}
+
+	// First check if device exists
+	r.mutex.RLock()
+	_, exists := r.devices[deviceID]
+	r.mutex.RUnlock()
+
+	if !exists {
+		return nil, errors.New("device not found")
+	}
+
+	// Then retrieve the key from secure storage
+	return r.keyStore.GetPrivateKey(deviceID, reason)
+}
+
+// RotateDeviceKey generates a new key pair for a device
+func (r *DeviceRegistry) RotateDeviceKey(deviceID string) ([]byte, error) {
+	r.log.Info("Rotating key for device", zap.String("device_id", deviceID))
+
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	device, exists := r.devices[deviceID]
+	if !exists {
+		r.log.Warn("Attempted to rotate key for non-existent device", zap.String("device_id", deviceID))
+		return nil, errors.New("device not found")
+	}
+
+	if r.keyStore == nil {
+		r.log.Error("Key store not available", zap.String("device_id", deviceID))
+		return nil, errors.New("key store not available")
+	}
+
+	// Rotate the key in the key store
+	publicKeyPEM, err := r.keyStore.RotateKey(deviceID)
+	if err != nil {
+		r.log.Error("Failed to rotate key", zap.String("device_id", deviceID), zap.Error(err))
+		return nil, fmt.Errorf("failed to rotate key: %w", err)
+	}
+
+	// Update device with new public key
+	device.PublicKey = publicKeyPEM
+
+	// Publish key rotation event
+	r.eventChannel <- DeviceEvent{
+		Type:      "DEVICE_KEY_ROTATED",
+		DeviceID:  deviceID,
+		Timestamp: time.Now(),
+	}
+
+	r.log.Info("Device key rotated successfully", zap.String("device_id", deviceID))
+	return publicKeyPEM, nil
 }
 
 // Helper functions

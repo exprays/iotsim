@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -802,6 +803,101 @@ func (r *Router) UpdateSensorReadingHandler(w http.ResponseWriter, req *http.Req
 		"success": true,
 		"sensor":  sensorType,
 		"value":   value,
+	})
+}
+
+// VerifyTransactionHandler verifies a transaction's signature
+func (r *Router) VerifyTransactionHandler(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	txID := vars["id"]
+
+	// Look for the transaction in blocks and pending transactions
+	var tx *blockchain.Transaction
+
+	// Check pending transactions first
+	for i := range r.app.Blockchain.PendingTransactions {
+		if r.app.Blockchain.PendingTransactions[i].ID == txID {
+			tx = &r.app.Blockchain.PendingTransactions[i]
+			break
+		}
+	}
+
+	// If not found in pending, check blocks
+	if tx == nil {
+		for _, block := range r.app.Blockchain.Chain {
+			for i := range block.Transactions {
+				if block.Transactions[i].ID == txID {
+					tx = &block.Transactions[i]
+					break
+				}
+			}
+			if tx != nil {
+				break
+			}
+		}
+	}
+
+	if tx == nil {
+		respondWithError(w, http.StatusNotFound, "Transaction not found")
+		return
+	}
+
+	// Get the sender's public key (in a real implementation, this would be looked up)
+	// For this example, we'll request the public key from the device registry
+	senderAddr := tx.Sender
+	if senderAddr == "SYSTEM" {
+		// System transactions are auto-verified
+		respondWithJSON(w, http.StatusOK, map[string]interface{}{
+			"verified": true,
+			"message":  "System transaction is auto-verified",
+		})
+		return
+	}
+
+	// In reality, we would look up the public key for this address
+	// (either from the device registry or a dedicated key service)
+	device, err := r.app.DeviceRegistry.GetDeviceByBlockchainAddr(senderAddr)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "Sender not found")
+		return
+	}
+
+	// Decode the public key
+	publicKey, err := blockchain.DecodePublicKey(device.PublicKey)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to decode public key")
+		return
+	}
+
+	// Verify the signature
+	verified := blockchain.VerifyTransaction(tx, publicKey)
+
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"verified": verified,
+		"txId":     tx.ID,
+		"sender":   tx.Sender,
+	})
+}
+
+// RotateDeviceKeyHandler rotates a device's cryptographic keys
+func (r *Router) RotateDeviceKeyHandler(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	deviceID := vars["id"]
+
+	publicKey, err := r.app.DeviceRegistry.RotateDeviceKey(deviceID)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	// For security, we only return a fingerprint of the new key, not the key itself
+	hashBytes := sha256.Sum256(publicKey)
+	fingerprint := fmt.Sprintf("%x", hashBytes[:8])
+
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"success":        true,
+		"message":        "Device key rotated successfully",
+		"keyFingerprint": fingerprint,
 	})
 }
 

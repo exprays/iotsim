@@ -144,3 +144,21 @@ func setupDirectories(config *core.Config) error {
 
 	return nil
 }
+
+func loadConfig() *core.Config {
+	// Load from file or environment
+	config := &core.Config{}
+	// ... existing code ...
+
+	// Set defaults if not loaded
+	if config.Device.KeyStorePath == "" {
+		// Default to a subdirectory of the data directory
+		config.Device.KeyStorePath = filepath.Join("data", "keystore.dat")
+	}
+
+	if config.Device.KeyFormat == "" {
+		config.Device.KeyFormat = "PKCS8" // Default key format
+	}
+
+	return config
+}

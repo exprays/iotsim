@@ -84,6 +84,7 @@ func (r *Router) setupRoutes() {
 	protected.HandleFunc("/blockchain/transactions/{id}", r.GetTransactionByIDHandler).Methods("GET")
 	protected.HandleFunc("/blockchain/mine", r.MineBlockHandler).Methods("POST")
 	protected.HandleFunc("/blockchain/validate", r.ValidateBlockchainHandler).Methods("GET")
+	protected.HandleFunc("/blockchain/transactions/{id}/verify", r.VerifyTransactionHandler).Methods("GET")
 
 	// Device routes
 	protected.HandleFunc("/devices", r.ListDevicesHandler).Methods("GET")
@@ -94,6 +95,8 @@ func (r *Router) setupRoutes() {
 	protected.HandleFunc("/devices/{id}/status", r.UpdateDeviceStatusHandler).Methods("PUT")
 	protected.HandleFunc("/devices/{id}/data", r.GetDeviceDataHandler).Methods("GET")
 	protected.HandleFunc("/devices/{id}/command", r.SendDeviceCommandHandler).Methods("POST")
+	// In setupRoutes function
+	protected.HandleFunc("/devices/{id}/rotate-key", r.RotateDeviceKeyHandler).Methods("POST")
 
 	// ESP8266 specific routes
 	protected.HandleFunc("/esp8266", r.ListESP8266Handler).Methods("GET")

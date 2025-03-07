@@ -138,7 +138,15 @@ func (bc *Blockchain) AddTransaction(tx Transaction) error {
 		return fmt.Errorf("invalid transaction: missing sender or recipient")
 	}
 
-	// In a real implementation, you'd verify the signature here
+	// Skip signature verification for system transactions
+	if tx.Sender == "SYSTEM" {
+		tx.Verified = true
+	} else if tx.Signature == nil {
+		// Non-system transactions must be signed
+		return fmt.Errorf("invalid transaction: missing signature")
+	}
+	// Note: The actual signature verification happens in the core app layer
+	// before transactions are submitted to the blockchain
 
 	bc.PendingTransactions = append(bc.PendingTransactions, tx)
 	return nil

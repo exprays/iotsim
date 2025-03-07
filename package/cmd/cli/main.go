@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"flag"
 	"fmt"
 	"os"
@@ -99,7 +100,7 @@ func main() {
 	if *interactive && *command == "" {
 		runInteractiveMode()
 	} else if *command != "" {
-		executeCommand(*command)
+		executeCommand(*command, []string{})
 	} else {
 		log.Fatal("Must specify either interactive mode or a command to run")
 	}
@@ -145,54 +146,34 @@ func runInteractiveMode() {
 			break
 		}
 
-		executeCommand(input)
+		args := []string{}
+		if len(parts) > 1 {
+			args = parts[1:]
+		}
+		executeCommand(command, args)
 	}
 }
 
-func executeCommand(commandLine string) {
-	parts := strings.Fields(commandLine)
-	if len(parts) == 0 {
-		return
-	}
-
-	command := strings.ToLower(parts[0])
-	args := parts[1:]
-
+// Update the main command handler function
+func executeCommand(command string, args []string) {
 	switch command {
-	case "help":
-		showHelp()
 	case "status":
 		showStatus()
-	case "devices":
-		if len(args) > 0 {
-			handleDeviceCommand(args[0], args[1:])
-		} else {
-			listDevices()
-		}
+	case "device", "devices":
+		handleDeviceCommand(args[0], args[1:])
 	case "blockchain":
-		if len(args) > 0 {
-			handleBlockchainCommand(args[0], args[1:])
-		} else {
-			showBlockchainStatus()
-		}
-	case "register":
-		if len(args) > 0 {
-			handleRegisterCommand(args[0], args[1:])
-		} else {
-			fmt.Println("Usage: register [device|esp8266] [name] [options...]")
-		}
+		handleBlockchainCommand(args[0], args[1:])
 	case "mine":
 		mineBlock()
 	case "validate":
 		validateBlockchain()
-	case "send":
-		if len(args) >= 3 {
-			sendCommand(args[0], args[1], args[2:])
-		} else {
-			fmt.Println("Usage: send [device-id] [command] [params...]")
-		}
+	case "keys", "key":
+		handleKeyCommand(args[0], args[1:])
+	case "exit", "quit":
+		fmt.Println("Exiting.")
+		os.Exit(0)
 	default:
-		fmt.Printf("Unknown command: %s. Type 'help' for available commands.\n", command)
+		fmt.Printf("Unknown command: %s\n", command)
 	}
 }
 
@@ -218,6 +199,11 @@ func showHelp() {
 	fmt.Println("  blockchain txs         - List recent transactions")
 	fmt.Println("  mine                   - Mine a new block")
 	fmt.Println("  validate               - Validate blockchain integrity")
+
+	fmt.Println("\n🔷 Key Management Commands:")
+	fmt.Println("  keys list              - List all device keys")
+	fmt.Println("  keys rotate [device-id] - Rotate device key")
+	fmt.Println("  keys export [device-id] - Export device public key")
 
 	fmt.Println()
 }
@@ -615,4 +601,89 @@ func sendCommand(deviceID, command string, params []string) {
 
 	green.Printf("Command '%s' sent to device %s with parameters: %v\n",
 		command, deviceID, paramsMap)
+}
+
+func handleKeyCommand(subCommand string, args []string) {
+	switch subCommand {
+	case "list":
+		listDeviceKeys()
+	case "rotate":
+		if len(args) < 1 {
+			fmt.Println("Usage: keys rotate <device-id>")
+			return
+		}
+		rotateDeviceKey(args[0])
+	case "export":
+		if len(args) < 1 {
+			fmt.Println("Usage: keys export <device-id>")
+			return
+		}
+		exportDevicePublicKey(args[0])
+	default:
+		fmt.Printf("Unknown key subcommand: %s\n", subCommand)
+	}
+}
+
+func listDeviceKeys() {
+	devices := app.DeviceRegistry.ListDevices()
+
+	if len(devices) == 0 {
+		fmt.Println("No devices registered.")
+		return
+	}
+
+	bold.Println("\n🔑 Device Keys")
+	fmt.Printf("\n%-36s %-20s %-40s\n", "DEVICE ID", "NAME", "BLOCKCHAIN ADDRESS")
+	fmt.Println(strings.Repeat("-", 100))
+
+	for _, dev := range devices {
+		fmt.Printf("%-36s %-20s %-40s\n",
+			dev.ID,
+			dev.Name,
+			dev.BlockchainAddr)
+	}
+}
+
+func rotateDeviceKey(deviceID string) {
+	fmt.Printf("Rotating key for device %s...\n", deviceID)
+
+	// Get the device first to verify it exists
+	device, err := app.DeviceRegistry.GetDeviceByID(deviceID)
+	if err != nil {
+		red.Printf("Error: %v\n", err)
+		return
+	}
+
+	// Call the key rotation API
+	publicKey, err := app.DeviceRegistry.RotateDeviceKey(deviceID)
+	if err != nil {
+		red.Printf("Failed to rotate key: %v\n", err)
+		return
+	}
+
+	green.Println("Key rotated successfully!")
+	fmt.Printf("Device: %s (%s)\n", device.Name, device.ID)
+	hash := sha256.Sum256(publicKey)
+	fmt.Printf("New public key fingerprint: %x\n", hash[:8])
+}
+
+func exportDevicePublicKey(deviceID string) {
+	device, err := app.DeviceRegistry.GetDeviceByID(deviceID)
+	if err != nil {
+		red.Printf("Error: %v\n", err)
+		return
+	}
+
+	if device.PublicKey == nil || len(device.PublicKey) == 0 {
+		red.Println("Device has no public key.")
+		return
+	}
+
+	outputFile := fmt.Sprintf("%s_pubkey.pem", deviceID)
+	if err := os.WriteFile(outputFile, device.PublicKey, 0644); err != nil {
+		red.Printf("Failed to export key: %v\n", err)
+		return
+	}
+
+	green.Printf("Public key exported to %s\n", outputFile)
 }

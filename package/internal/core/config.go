@@ -31,12 +31,13 @@ type BlockchainConfig struct {
 	PersistPath          string  `json:"persistPath" yaml:"persistPath"`
 }
 
-// DeviceConfig holds device-specific configuration
+// DeviceConfig holds device-related settings
 type DeviceConfig struct {
-	RegistryPath         string `json:"registryPath" yaml:"registryPath"`
-	DeviceTimeoutSeconds int    `json:"deviceTimeoutSeconds" yaml:"deviceTimeoutSeconds"`
-	StatusCheckInterval  int    `json:"statusCheckInterval" yaml:"statusCheckInterval"`
-	AutoApproveDevices   bool   `json:"autoApproveDevices" yaml:"autoApproveDevices"`
+	RegistryPath         string `json:"registry_path" yaml:"registry_path"`
+	StatusCheckInterval  int    `json:"status_check_interval" yaml:"status_check_interval"`
+	DeviceTimeoutSeconds int    `json:"device_timeout_seconds" yaml:"device_timeout_seconds"`
+	KeyStorePath         string `json:"key_store_path" yaml:"key_store_path"`
+	KeyFormat            string `json:"key_format" yaml:"key_format"`
 }
 
 // APIConfig holds API-specific configuration
@@ -117,7 +118,8 @@ func DefaultConfig() *Config {
 			RegistryPath:         "./data/devices.json",
 			DeviceTimeoutSeconds: 300,
 			StatusCheckInterval:  60,
-			AutoApproveDevices:   false,
+			KeyStorePath:         "./data/keystore",
+			KeyFormat:            "pem",
 		},
 		API: APIConfig{
 			Enabled:        true,
