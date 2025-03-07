@@ -183,6 +183,11 @@ func (a *App) RegisterDevice(name string, deviceType device.DeviceType,
 		return nil, err
 	}
 
+	// Save registry after registration
+	if err := a.DeviceRegistry.SaveRegistry(a.Config.Device.RegistryPath); err != nil {
+		return nil, fmt.Errorf("failed to save device registry: %w", err)
+	}
+
 	// Log device registration
 	a.emitEvent("device_registered", map[string]interface{}{
 		"device_id": dev.ID,
@@ -195,7 +200,18 @@ func (a *App) RegisterDevice(name string, deviceType device.DeviceType,
 
 // RegisterESP8266 registers a new ESP8266 device
 func (a *App) RegisterESP8266(name string, wifiSSID string) (*device.ESP8266Device, error) {
-	return a.ESP8266Manager.RegisterESP8266(name, wifiSSID)
+	// Register the ESP8266 device
+	esp, err := a.ESP8266Manager.RegisterESP8266(name, wifiSSID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save registry after registration - THIS FIXES THE ISSUE
+	if err := a.DeviceRegistry.SaveRegistry(a.Config.Device.RegistryPath); err != nil {
+		return nil, fmt.Errorf("failed to save device registry: %w", err)
+	}
+
+	return esp, nil
 }
 
 // ProcessDeviceData processes data received from a device and adds it to the blockchain
