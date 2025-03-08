@@ -98,8 +98,8 @@ func (r *Router) setupRoutes() {
 	// ESP8266 specific routes
 	r.Router.HandleFunc("/api/esp8266", r.ListESP8266Handler).Methods("GET")
 	r.Router.HandleFunc("/api/esp8266", r.RegisterESP8266Handler).Methods("POST")
-	protected.HandleFunc("/esp8266/{id}/led", r.UpdateESP8266LEDHandler).Methods("PUT")
-	protected.HandleFunc("/esp8266/{id}/readings", r.GetESP8266ReadingsHandler).Methods("GET")
+	r.Router.HandleFunc("/esp8266/{id}/led", r.UpdateESP8266LEDHandler).Methods("PUT")
+	r.Router.HandleFunc("/esp8266/{id}/readings", r.GetESP8266ReadingsHandler).Methods("GET")
 
 	// Documentation route
 	api.HandleFunc("/docs", r.APIDocsHandler).Methods("GET")

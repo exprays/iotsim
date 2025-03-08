@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"ranger/internal/blockchain"
 	"ranger/internal/device"
 )
@@ -37,9 +39,12 @@ type App struct {
 	mu           sync.RWMutex
 	stopChan     chan struct{}
 	wg           sync.WaitGroup
-	ctx          context.Context
-	cancelFunc   context.CancelFunc
 	eventHandler func(eventType string, data interface{})
+
+	// Context-related fields
+	ctx        context.Context
+	cancelFunc context.CancelFunc
+	log        *zap.Logger
 }
 
 // NewApp creates a new application instance
@@ -54,19 +59,20 @@ func NewApp(config *Config) (*App, error) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	logger, err := zap.NewProduction()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create logger: %w", err)
+	}
 
-	app := &App{
+	return &App{
 		Config:     config,
 		Status:     StatusInitializing,
 		stopChan:   make(chan struct{}),
 		ctx:        ctx,
 		cancelFunc: cancel,
-	}
-
-	return app, nil
+		log:        logger,
+	}, nil
 }
-
-// resolveConfigPaths ensures all relative paths in config are properly resolved
 func resolveConfigPaths(config *Config) error {
 	// Use a fixed, predictable path that works for both client and server
 
@@ -125,6 +131,17 @@ func (a *App) Initialize() error {
 
 	// Initialize device registry
 	a.DeviceRegistry = device.NewDeviceRegistry()
+
+	// Load existing devices from registry file
+	err := a.DeviceRegistry.LoadRegistry(a.Config.Device.RegistryPath)
+	if err != nil {
+		a.log.Warn("Failed to load device registry", zap.Error(err),
+			zap.String("path", a.Config.Device.RegistryPath))
+		// Continue despite error - empty registry will be used
+	} else {
+		devices := a.DeviceRegistry.ListDevices()
+		a.log.Info("Device registry loaded", zap.Int("count", len(devices)))
+	}
 
 	// Initialize ESP8266 manager
 	a.ESP8266Manager = device.NewESP8266Manager(a.DeviceRegistry)

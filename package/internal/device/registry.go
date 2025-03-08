@@ -82,17 +82,22 @@ func NewDeviceRegistry() *DeviceRegistry {
 
 // RegisterDevice adds a new device to the registry
 func (r *DeviceRegistry) RegisterDevice(name string, deviceType DeviceType, capabilities []string, metadata map[string]interface{}) (*Device, error) {
-	r.log.Info("Registering new device",
-		zap.String("name", name),
-		zap.String("type", string(deviceType)))
-
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	// Generate unique device ID
+	// Check for existing device with the same name and type
+	for _, dev := range r.devices {
+		if dev.Name == name && dev.Type == deviceType {
+			r.log.Info("Device with the same name already exists",
+				zap.String("name", name),
+				zap.String("id", dev.ID))
+			return dev, nil
+		}
+	}
+
+	// Continue with registration if no matching device found
 	deviceID, err := generateID()
 	if err != nil {
-		r.log.Error("Failed to generate device ID", zap.Error(err))
 		return nil, fmt.Errorf("failed to generate device ID: %w", err)
 	}
 
@@ -179,6 +184,20 @@ func (r *DeviceRegistry) GetDeviceByAPIKey(apiKey string) (*Device, error) {
 	}
 
 	return device, nil
+}
+
+// GetDeviceByName retrieves a device by its name
+func (r *DeviceRegistry) GetDeviceByName(name string) (*Device, error) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	for _, dev := range r.devices {
+		if dev.Name == name {
+			return dev, nil
+		}
+	}
+
+	return nil, fmt.Errorf("device with name '%s' not found", name)
 }
 
 // UpdateDeviceStatus updates a device's status

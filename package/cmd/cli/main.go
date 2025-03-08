@@ -343,66 +343,71 @@ func handleDeviceCommand(subCommand string, args []string) {
 }
 
 func showDeviceInfo(deviceID string) {
-	dev, err := app.DeviceRegistry.GetDeviceByID(deviceID)
-	if err != nil {
-		red.Printf("Error: %v\n", err)
-		return
-	}
+    // First try by ID
+    dev, err := app.DeviceRegistry.GetDeviceByID(deviceID)
+    if err != nil {
+        // If ID lookup fails, try by name
+        dev, err = app.DeviceRegistry.GetDeviceByName(deviceID)
+        if err != nil {
+            red.Printf("Error: No device found with ID or name '%s'\n", deviceID)
+            return
+        }
+    }
 
-	bold.Println("\n📱 Device Information")
-	fmt.Printf("ID: %s\n", dev.ID)
-	fmt.Printf("Name: %s\n", dev.Name)
-	fmt.Printf("Type: %s\n", dev.Type)
-	fmt.Printf("Status: %s\n", dev.Status)
-	fmt.Printf("Last seen: %s\n", dev.LastSeen.Format(time.RFC3339))
-	fmt.Printf("Registered at: %s\n", dev.RegisteredAt.Format(time.RFC3339))
-	fmt.Printf("Blockchain address: %s\n", dev.BlockchainAddr)
+    bold.Println("\n📱 Device Information")
+    fmt.Printf("ID: %s\n", dev.ID)
+    fmt.Printf("Name: %s\n", dev.Name)
+    fmt.Printf("Type: %s\n", dev.Type)
+    fmt.Printf("Status: %s\n", dev.Status)
+    fmt.Printf("Last seen: %s\n", dev.LastSeen.Format(time.RFC3339))
+    fmt.Printf("Registered at: %s\n", dev.RegisteredAt.Format(time.RFC3339))
+    fmt.Printf("Blockchain address: %s\n", dev.BlockchainAddr)
 
-	if len(dev.Capabilities) > 0 {
-		fmt.Println("\nCapabilities:")
-		for _, cap := range dev.Capabilities {
-			fmt.Printf("  - %s\n", cap)
-		}
-	}
+    if len(dev.Capabilities) > 0 {
+        fmt.Println("\nCapabilities:")
+        for _, cap := range dev.Capabilities {
+            fmt.Printf("  - %s\n", cap)
+        }
+    }
 
-	if dev.Metadata != nil && len(dev.Metadata) > 0 {
-		fmt.Println("\nMetadata:")
-		for key, value := range dev.Metadata {
-			fmt.Printf("  %s: %v\n", key, value)
-		}
-	}
+    if dev.Metadata != nil && len(dev.Metadata) > 0 {
+        fmt.Println("\nMetadata:")
+        for key, value := range dev.Metadata {
+            fmt.Printf("  %s: %v\n", key, value)
+        }
+    }
 
-	// If it's an ESP8266, get more details
-	if dev.Type == device.ESP8266 {
-		esp, err := app.ESP8266Manager.GetESP8266(deviceID)
-		if err == nil {
-			fmt.Println("\nESP8266 Specific Information:")
-			fmt.Printf("  WiFi SSID: %s\n", esp.WifiSSID)
-			fmt.Printf("  WiFi Connected: %v\n", esp.WifiConnected)
-			fmt.Printf("  LED State: %v\n", esp.LEDState)
-			fmt.Printf("  Button State: %v\n", esp.ButtonState)
+    // If it's an ESP8266, get more details
+    if dev.Type == device.ESP8266 {
+        esp, err := app.ESP8266Manager.GetESP8266(deviceID)
+        if err == nil {
+            fmt.Println("\nESP8266 Specific Information:")
+            fmt.Printf("  WiFi SSID: %s\n", esp.WifiSSID)
+            fmt.Printf("  WiFi Connected: %v\n", esp.WifiConnected)
+            fmt.Printf("  LED State: %v\n", esp.LEDState)
+            fmt.Printf("  Button State: %v\n", esp.ButtonState)
 
-			if len(esp.SensorReadings) > 0 {
-				fmt.Println("\n  Sensor Readings:")
-				for sensor, value := range esp.SensorReadings {
-					fmt.Printf("    %s: %.2f\n", sensor, value)
-				}
-			}
-		}
-	}
+            if len(esp.SensorReadings) > 0 {
+                fmt.Println("\n  Sensor Readings:")
+                for sensor, value := range esp.SensorReadings {
+                    fmt.Printf("    %s: %.2f\n", sensor, value)
+                }
+            }
+        }
+    }
 
-	// Show blockchain transactions for this device
-	transactions, err := app.GetDeviceData(deviceID)
-	if err == nil && len(transactions) > 0 {
-		fmt.Printf("\nRecent Blockchain Transactions (%d):\n", len(transactions))
-		for i, tx := range transactions {
-			if i >= 5 { // Show only the 5 most recent
-				fmt.Printf("  ... and %d more\n", len(transactions)-5)
-				break
-			}
-			fmt.Printf("  %s: %s\n", tx.ID[:8], time.Time(tx.Timestamp).Format(time.RFC3339))
-		}
-	}
+    // Show blockchain transactions for this device
+    transactions, err := app.GetDeviceData(deviceID)
+    if err == nil && len(transactions) > 0 {
+        fmt.Printf("\nRecent Blockchain Transactions (%d):\n", len(transactions))
+        for i, tx := range transactions {
+            if i >= 5 { // Show only the 5 most recent
+                fmt.Printf("  ... and %d more\n", len(transactions)-5)
+                break
+            }
+            fmt.Printf("  %s: %s\n", tx.ID[:8], time.Time(tx.Timestamp).Format(time.RFC3339))
+        }
+    }
 }
 
 func deleteDevice(deviceID string) {
