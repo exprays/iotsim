@@ -69,22 +69,43 @@ func NewApp(config *Config) (*App, error) {
 
 // resolveConfigPaths ensures all relative paths in config are properly resolved
 func resolveConfigPaths(config *Config) error {
-	// First priority: Check for RANGER_ROOT environment variable
-	projectRoot := os.Getenv("RANGER_ROOT")
+	// First attempt: Use fixed project location based on common directory structure
+	projectRoot := ""
 
-	// Second priority: Use working directory as project root
+	// Check for an environment variable first
+	projectRoot = os.Getenv("RANGER_ROOT")
+
 	if projectRoot == "" {
+		// Try to locate the project root by walking up directories
 		wd, err := os.Getwd()
 		if err != nil {
 			return fmt.Errorf("failed to get working directory: %w", err)
 		}
 
-		// If we're in cmd/server or cmd/cli, go up two levels
-		if strings.Contains(wd, "cmd/server") || strings.Contains(wd, "cmd\\server") ||
-			strings.Contains(wd, "cmd/cli") || strings.Contains(wd, "cmd\\cli") {
+		// Check for common patterns in the path that would indicate we're in the project
+		if strings.Contains(wd, "iotsim-main\\iotsim\\package") ||
+			strings.Contains(wd, "iotsim-main/iotsim/package") {
+			// Extract the path up to and including "iotsim-main/iotsim/package"
+			idx := strings.Index(wd, "iotsim-main")
+			if idx >= 0 {
+				packageIdx := strings.Index(wd[idx:], "package")
+				if packageIdx >= 0 {
+					projectRoot = wd[:idx+packageIdx+7] // +7 for "package"
+				}
+			}
+		} else if strings.Contains(wd, "\\cmd\\") || strings.Contains(wd, "/cmd/") {
+			// If in a cmd subdirectory, go up two levels
 			projectRoot = filepath.Dir(filepath.Dir(wd))
 		} else {
-			projectRoot = wd
+			// If we couldn't determine the path, use a fixed system path as fallback
+			// This ensures the CLI and server always use the same location
+			home, err := os.UserHomeDir()
+			if err == nil {
+				projectRoot = filepath.Join(home, "iotsim-data")
+			} else {
+				// Last resort: use current directory
+				projectRoot = wd
+			}
 		}
 	}
 
@@ -94,18 +115,12 @@ func resolveConfigPaths(config *Config) error {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
 
-	// Resolve device registry path if it starts with "./data" or similar relative path
-	if strings.HasPrefix(config.Device.RegistryPath, "./") ||
-		strings.HasPrefix(config.Device.RegistryPath, ".\\") ||
-		!filepath.IsAbs(config.Device.RegistryPath) {
-		config.Device.RegistryPath = filepath.Join(projectRoot, config.Device.RegistryPath)
-	}
+	// ALWAYS use the same absolute path for the device registry
+	config.Device.RegistryPath = filepath.Join(dataDir, "devices.json")
 
-	// Resolve blockchain persist path if it's relative
-	if strings.HasPrefix(config.Blockchain.PersistPath, "./") ||
-		strings.HasPrefix(config.Blockchain.PersistPath, ".\\") ||
-		!filepath.IsAbs(config.Blockchain.PersistPath) {
-		config.Blockchain.PersistPath = filepath.Join(projectRoot, config.Blockchain.PersistPath)
+	// For blockchain data, do the same approach
+	if !filepath.IsAbs(config.Blockchain.PersistPath) {
+		config.Blockchain.PersistPath = filepath.Join(dataDir, "blockchain.json")
 	}
 
 	return nil
