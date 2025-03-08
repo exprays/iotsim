@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -69,45 +68,32 @@ func NewApp(config *Config) (*App, error) {
 
 // resolveConfigPaths ensures all relative paths in config are properly resolved
 func resolveConfigPaths(config *Config) error {
-	// First attempt: Use fixed project location based on common directory structure
-	projectRoot := ""
+	// Use a fixed, predictable path that works for both client and server
 
-	// Check for an environment variable first
-	projectRoot = os.Getenv("RANGER_ROOT")
+	// First priority: Environment variable if set
+	projectRoot := os.Getenv("IOTSIM_ROOT")
 
+	// Second priority: Use parent directory of f:\seminar\package
 	if projectRoot == "" {
-		// Try to locate the project root by walking up directories
-		wd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("failed to get working directory: %w", err)
-		}
-
-		// Check for common patterns in the path that would indicate we're in the project
-		if strings.Contains(wd, "iotsim-main\\iotsim\\package") ||
-			strings.Contains(wd, "iotsim-main/iotsim/package") {
-			// Extract the path up to and including "iotsim-main/iotsim/package"
-			idx := strings.Index(wd, "iotsim-main")
-			if idx >= 0 {
-				packageIdx := strings.Index(wd[idx:], "package")
-				if packageIdx >= 0 {
-					projectRoot = wd[:idx+packageIdx+7] // +7 for "package"
-				}
-			}
-		} else if strings.Contains(wd, "\\cmd\\") || strings.Contains(wd, "/cmd/") {
-			// If in a cmd subdirectory, go up two levels
-			projectRoot = filepath.Dir(filepath.Dir(wd))
+		// Default to a fixed path in user's home directory
+		home, err := os.UserHomeDir()
+		if err == nil {
+			projectRoot = filepath.Join(home, "iotsim-data")
 		} else {
-			// If we couldn't determine the path, use a fixed system path as fallback
-			// This ensures the CLI and server always use the same location
-			home, err := os.UserHomeDir()
+			// Last resort: use executable directory
+			execPath, err := os.Executable()
 			if err == nil {
-				projectRoot = filepath.Join(home, "iotsim-data")
+				projectRoot = filepath.Dir(execPath)
 			} else {
-				// Last resort: use current directory
+				// Final fallback
+				wd, _ := os.Getwd()
 				projectRoot = wd
 			}
 		}
 	}
+
+	// Print path to make troubleshooting easier
+	fmt.Printf("Using data directory: %s\n", projectRoot)
 
 	// Ensure data directory exists
 	dataDir := filepath.Join(projectRoot, "data")
