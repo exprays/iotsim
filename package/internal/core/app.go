@@ -3,6 +3,9 @@ package core
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,6 +49,11 @@ func NewApp(config *Config) (*App, error) {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
 
+	// Fix relative paths by making them absolute based on executable location
+	if err := resolveConfigPaths(config); err != nil {
+		return nil, err
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	app := &App{
@@ -57,6 +65,47 @@ func NewApp(config *Config) (*App, error) {
 	}
 
 	return app, nil
+}
+
+// resolveConfigPaths ensures all relative paths in config are properly resolved
+// to absolute paths based on the application root directory
+func resolveConfigPaths(config *Config) error {
+	// Get the executable directory
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+
+	// Get the project root directory (two levels up from bin directory)
+	projectRoot := filepath.Dir(filepath.Dir(filepath.Dir(exePath)))
+
+	// For development mode, use current working directory's parent
+	if strings.HasSuffix(filepath.Base(exePath), ".test") ||
+		(filepath.Base(exePath) == "main" && filepath.Ext(exePath) == "") {
+		// We're likely running from 'go run' or tests
+		wd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+		// If running from cmd/cli or cmd/server, go up two levels
+		if strings.Contains(wd, "cmd") {
+			projectRoot = filepath.Dir(filepath.Dir(wd))
+		} else {
+			projectRoot = wd
+		}
+	}
+
+	// Resolve device registry path if it's relative
+	if !filepath.IsAbs(config.Device.RegistryPath) {
+		config.Device.RegistryPath = filepath.Join(projectRoot, config.Device.RegistryPath)
+	}
+
+	// Resolve blockchain persist path if it's relative
+	if !filepath.IsAbs(config.Blockchain.PersistPath) {
+		config.Blockchain.PersistPath = filepath.Join(projectRoot, config.Blockchain.PersistPath)
+	}
+
+	return nil
 }
 
 // Initialize sets up all components of the application
