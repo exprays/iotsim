@@ -86,8 +86,8 @@ func (r *Router) setupRoutes() {
 	protected.HandleFunc("/blockchain/validate", r.ValidateBlockchainHandler).Methods("GET")
 
 	// Device routes
-	protected.HandleFunc("/devices", r.ListDevicesHandler).Methods("GET")
-	protected.HandleFunc("/devices", r.RegisterDeviceHandler).Methods("POST")
+	r.Router.HandleFunc("/api/devices", r.ListDevicesHandler).Methods("GET")
+	r.Router.HandleFunc("/api/devices", r.RegisterDeviceHandler).Methods("POST")
 	protected.HandleFunc("/devices/{id}", r.GetDeviceHandler).Methods("GET")
 	protected.HandleFunc("/devices/{id}", r.UpdateDeviceHandler).Methods("PUT")
 	protected.HandleFunc("/devices/{id}", r.DeleteDeviceHandler).Methods("DELETE")
@@ -96,8 +96,8 @@ func (r *Router) setupRoutes() {
 	protected.HandleFunc("/devices/{id}/command", r.SendDeviceCommandHandler).Methods("POST")
 
 	// ESP8266 specific routes
-	protected.HandleFunc("/esp8266", r.ListESP8266Handler).Methods("GET")
-	protected.HandleFunc("/esp8266", r.RegisterESP8266Handler).Methods("POST")
+	r.Router.HandleFunc("/api/esp8266", r.ListESP8266Handler).Methods("GET")
+	r.Router.HandleFunc("/api/esp8266", r.RegisterESP8266Handler).Methods("POST")
 	protected.HandleFunc("/esp8266/{id}/led", r.UpdateESP8266LEDHandler).Methods("PUT")
 	protected.HandleFunc("/esp8266/{id}/readings", r.GetESP8266ReadingsHandler).Methods("GET")
 

@@ -1,0 +1,50 @@
+{
+  "a58ac247-f713-3f2a-ae98-fe9d1957c06f": {
+    "id": "a58ac247-f713-3f2a-ae98-fe9d1957c06f",
+    "name": "ESP8266_NODE_2",
+    "type": "ESP8266",
+    "status": "Offline",
+    "lastSeen": "2025-03-08T09:02:30.6788739+05:30",
+    "registeredAt": "2025-03-08T09:02:30.6788739+05:30",
+    "apiKey": "KKnPSV0rEJJXjckrzjsksaGpWPTxXcwER3DncLjbSEY=",
+    "blockchainAddr": "0x54647e44a113d957e23d30d7d5a390a4f5fb4d44",
+    "capabilities": [
+      "temperature",
+      "humidity",
+      "led_control",
+      "button"
+    ],
+    "metadata": {
+      "led_state": false,
+      "pin_button": "D1",
+      "pin_led": "D2",
+      "poll_interval": 30,
+      "wifi_connected": false,
+      "wifi_ssid": "Prabhupada"
+    },
+    "firmwareVersion": ""
+  },
+  "cdf39388-b347-dd84-f961-28722a7ec8b2": {
+    "id": "cdf39388-b347-dd84-f961-28722a7ec8b2",
+    "name": "ESP8266_NODE_2",
+    "type": "ESP8266",
+    "status": "Offline",
+    "lastSeen": "2025-03-08T09:04:31.3162323+05:30",
+    "registeredAt": "2025-03-08T09:04:31.3162323+05:30",
+    "apiKey": "y5rrBh5G3cv7OXISJzBG0ytBUWS1a7xyNxj9N6Jfwbo=",
+    "blockchainAddr": "0xfaab8fb41bd2c8471aff496304ca16153d433c22",
+    "capabilities": [
+      "temperature",
+      "humidity",
+      "led_control",
+      "button"
+    ],
+    "metadata": {
+      "pin_button": "D1",
+      "pin_led": "D2",
+      "poll_interval": 30,
+      "wifi_ssid": "Prabhupada"
+    },
+    "firmwareVersion": ""
+  }
+}

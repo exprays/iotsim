@@ -78,7 +78,7 @@ func resolveConfigPaths(config *Config) error {
 		// Default to a fixed path in user's home directory
 		home, err := os.UserHomeDir()
 		if err == nil {
-			projectRoot = filepath.Join(home, "iotsim-data")
+			projectRoot = filepath.Join(home, "iotsim/package")
 		} else {
 			// Last resort: use executable directory
 			execPath, err := os.Executable()
