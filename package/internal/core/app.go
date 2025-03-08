@@ -49,7 +49,7 @@ func NewApp(config *Config) (*App, error) {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
 
-	// Fix relative paths by making them absolute based on executable location
+	// Fix relative paths by making them absolute based on project root
 	if err := resolveConfigPaths(config); err != nil {
 		return nil, err
 	}
@@ -68,40 +68,43 @@ func NewApp(config *Config) (*App, error) {
 }
 
 // resolveConfigPaths ensures all relative paths in config are properly resolved
-// to absolute paths based on the application root directory
 func resolveConfigPaths(config *Config) error {
-	// Get the executable directory
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path: %w", err)
-	}
+	// First priority: Check for RANGER_ROOT environment variable
+	projectRoot := os.Getenv("RANGER_ROOT")
 
-	// Get the project root directory (two levels up from bin directory)
-	projectRoot := filepath.Dir(filepath.Dir(filepath.Dir(exePath)))
-
-	// For development mode, use current working directory's parent
-	if strings.HasSuffix(filepath.Base(exePath), ".test") ||
-		(filepath.Base(exePath) == "main" && filepath.Ext(exePath) == "") {
-		// We're likely running from 'go run' or tests
+	// Second priority: Use working directory as project root
+	if projectRoot == "" {
 		wd, err := os.Getwd()
 		if err != nil {
 			return fmt.Errorf("failed to get working directory: %w", err)
 		}
-		// If running from cmd/cli or cmd/server, go up two levels
-		if strings.Contains(wd, "cmd") {
+
+		// If we're in cmd/server or cmd/cli, go up two levels
+		if strings.Contains(wd, "cmd/server") || strings.Contains(wd, "cmd\\server") ||
+			strings.Contains(wd, "cmd/cli") || strings.Contains(wd, "cmd\\cli") {
 			projectRoot = filepath.Dir(filepath.Dir(wd))
 		} else {
 			projectRoot = wd
 		}
 	}
 
-	// Resolve device registry path if it's relative
-	if !filepath.IsAbs(config.Device.RegistryPath) {
+	// Ensure data directory exists
+	dataDir := filepath.Join(projectRoot, "data")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return fmt.Errorf("failed to create data directory: %w", err)
+	}
+
+	// Resolve device registry path if it starts with "./data" or similar relative path
+	if strings.HasPrefix(config.Device.RegistryPath, "./") ||
+		strings.HasPrefix(config.Device.RegistryPath, ".\\") ||
+		!filepath.IsAbs(config.Device.RegistryPath) {
 		config.Device.RegistryPath = filepath.Join(projectRoot, config.Device.RegistryPath)
 	}
 
 	// Resolve blockchain persist path if it's relative
-	if !filepath.IsAbs(config.Blockchain.PersistPath) {
+	if strings.HasPrefix(config.Blockchain.PersistPath, "./") ||
+		strings.HasPrefix(config.Blockchain.PersistPath, ".\\") ||
+		!filepath.IsAbs(config.Blockchain.PersistPath) {
 		config.Blockchain.PersistPath = filepath.Join(projectRoot, config.Blockchain.PersistPath)
 	}
 
