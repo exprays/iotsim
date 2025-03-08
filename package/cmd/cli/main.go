@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -30,6 +32,9 @@ var (
 	cyan      = color.New(color.FgCyan)
 	boldGreen = color.New(color.FgGreen, color.Bold)
 	boldRed   = color.New(color.FgRed, color.Bold)
+
+	useServerAPI bool   = true
+	apiBaseURL   string = "http://localhost:8080/api"
 )
 
 func main() {
@@ -250,8 +255,48 @@ func showStatus() {
 }
 
 func listDevices() {
-	devices := app.DeviceRegistry.ListDevices()
+	// Try server API first if enabled
+	if useServerAPI {
+		resp, err := http.Get(apiBaseURL + "/devices")
+		if err == nil && resp.StatusCode == http.StatusOK {
+			defer resp.Body.Close()
+			var devices []device.Device
+			if err := json.NewDecoder(resp.Body).Decode(&devices); err == nil {
+				bold.Println("\n📱 Registered Devices (from server)")
+				if len(devices) == 0 {
+					fmt.Println("No devices registered yet.")
+					return
+				}
 
+				// Display devices as before
+				fmt.Printf("\n%-36s %-20s %-10s %-20s\n", "ID", "NAME", "TYPE", "STATUS")
+				fmt.Println(strings.Repeat("-", 90))
+
+				for _, dev := range devices {
+					// Display code as before
+					status := string(dev.Status)
+					statusColored := status
+
+					switch dev.Status {
+					case device.Online:
+						statusColored = green.Sprint(status)
+					case device.Offline:
+						statusColored = yellow.Sprint(status)
+					case device.Suspended:
+						statusColored = red.Sprint(status)
+					}
+
+					fmt.Printf("%-36s %-20s %-10s %-20s\n", dev.ID, dev.Name, dev.Type, statusColored)
+				}
+				return
+			}
+		}
+		yellow.Println("Could not connect to server API, using local registry instead.")
+	}
+
+	// Fall back to local registry if server unavailable
+	devices := app.DeviceRegistry.ListDevices()
+	// Original code continues...
 	bold.Println("\n📱 Registered Devices")
 	if len(devices) == 0 {
 		fmt.Println("No devices registered yet.")
